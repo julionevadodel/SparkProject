@@ -4,6 +4,24 @@ import sys
 from preprocessing_data import *
 
 
+def preprocess_data(df):
+    df = clean_data(df)
+    df = cast_data(df)
+    df = clean_data2(df)
+
+    df_tr,df_tst = df.randomSplit([0.7,0.3],24)
+
+
+    return df_tr,df_tst
+
+def construct_pipeline(df):
+    indexers = cat_to_num(df)
+    ufss = feature_subset_selection(df)
+    stages = indexers
+    stages = stages+ufss
+    pipeline = create_pipeline(stages)
+    pipeline = pipeline.fit(df)
+    return pipeline
 
 
 
@@ -19,23 +37,13 @@ def main(path):
                         .getOrCreate()
 
     df = spark.read.csv(path,header=True)
+    
+    df_tr,df_tst = preprocess_data(df)
+    pipeline = construct_pipeline(df_tr)
 
-    df = clean_data(df)
-    show_missing_values(df)
+    df_tst_transformed = apply_pipeline(pipeline,df_tst)
 
-    df = cast_data(df)
-    show_missing_values(df)
-
-    df = clean_data2(df)
-    show_missing_values(df)
-
-    df = cat_to_num(df)
-    show_missing_values(df)
-
-    #corr = var_correlations(df)
-    #print(df.dtypes)
-
-    df.show(2)
+    df_tst_transformed.show(2)
     
     
 
