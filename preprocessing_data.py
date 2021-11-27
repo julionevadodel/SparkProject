@@ -1,4 +1,4 @@
-mport pyspark.sql.functions as f
+import pyspark.sql.functions as f
 from pyspark.ml.feature import StringIndexer, UnivariateFeatureSelector, VectorAssembler
 from pyspark.ml import Pipeline
 
