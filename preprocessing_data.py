@@ -26,6 +26,9 @@ def clean_data2(df):
     return df
 
 
+def drop_null(df):
+    df= df.na.drop()
+    return df
 
 
 
