@@ -1,7 +1,9 @@
-import pyspark.sql.functions as f
+mport pyspark.sql.functions as f
 from pyspark.ml.feature import StringIndexer, UnivariateFeatureSelector, VectorAssembler
 from pyspark.ml import Pipeline
 
+from pyspark.ml.tuning import ParamGridBuilder, CrossValidator
+from pyspark.ml.evaluation import RegressionEvaluator
 
 
 
@@ -24,7 +26,6 @@ def clean_data2(df):
     df = df.dropna(subset=["ArrDelay","TailNum"]) #If no flight, useless for ArrDelay?
     df = df.drop("Cancelled","CancellationCode")
     return df
-
 
 def drop_null(df):
     df= df.na.drop()
@@ -108,6 +109,13 @@ def cat_to_num(df):
 
 
 
+#########################################   SPLIT DATA   ##############################
+def split_data(df):
+    df_train,df_test = df.([0.7,0.3],24)
+
+    return df_train,df_test
+
+
 
 #########################################   FEATURE SELECTION  ##############################
 #def feature_subset_selection(df):
@@ -166,3 +174,79 @@ def apply_pipeline(pipeline,df):
         
     return df
 
+
+#########################################   VectorAssembler  ##############################    
+def create_vectorAssem(df):
+    vectorAssembler_str = VectorAssembler(inputCols=['DayOfWeek','CRSElapsedTime','DepDelay','Distance','TaxiOut','DepTime_index','CRSDepTime_index','CRSArrTime_index','Origin_index','Dest_index'], 
+    outputCol="features", handleInvalid="skip")
+
+    df= vectorAssembler_str.transform(df_string_converted)
+
+    return df 
+
+def create_final_set(df):
+    df=df.select('features','ArrDelay')
+
+    return df
+
+
+
+
+#########################################   Linear Regression  ##############################
+def apply_linear_regression(df_train,df_test):
+    # creates regressor
+    regressor = LinearRegression(featuresCol = 'features', labelCol = 'ArrDelay')
+
+    # trains model
+    regressor = regressor.fit(df_train)
+    print_metrics_LR(regressor)
+
+    # test/evaluate model
+    evaluator=regressor.evaluate(df_test)
+    predictions= evaluator.predictions
+
+  return predictions
+
+
+def print_metrics_LR(regressor):
+    
+    print("Linear Regression")
+
+    # What is the relationship between my dependent (x) and independent (y) variable? 
+    print("Coefficients: %s" % regressor.coefficients)
+    
+    # How much of the data does this model explain?
+    print("R-squared: %f" % regressor.summary.r2)    
+    
+    # square root of the average of the squared difference of the predicted and actual value
+    print("RMSE Root Mean Square Error: %f" % regressor.summary.rootMeanSquaredError)
+    
+
+#########################################   Cross validation  ##############################
+def crossValidation(df):
+    regression = LinearRegression(labelCol='ArrDelay')
+    evaluator = RegressionEvaluator(labelCol='ArrDelay')
+
+    # creates cross validator with 5 folds
+    cv = CrossValidator(estimator=regression, estimatorParamMaps=params, evaluator=evaluator, numFolds=5)
+
+    # Train and test model on 5 different folds="sets" of data
+    cv = cv.fit(df)
+    print_metrics_LR(cv)
+    bestModel=cv.bestModel
+
+    return bestModel 
+
+ 
+ def print_metrics_LR(cv):
+    
+    print("Linear Regression. Best Model ")
+
+    # What is the relationship between my dependent (x) and independent (y) variable? 
+    print("Coefficients: %s" % cv.bestModel.coefficients)
+    
+    # How much of the data does this model explain?
+    print("R-squared: %f" % cv.bestModel.summary.r2)    
+    
+    # square root of the average of the squared difference of the predicted and actual value
+    print("RMSE: %f" % regressor.summary.rootMeanSquaredError)   
