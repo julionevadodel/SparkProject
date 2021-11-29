@@ -2,6 +2,31 @@ from pyspark.sql import SparkSession
 import os
 import sys
 from preprocessing_data import *
+from modelling_data import *   
+from pyspark.sql.functions import rand
+
+def read_file(spark,path):
+    try:
+        df = spark.read.csv(path,header=True)
+    except:
+        return "Path not valid"
+    try:   
+        if df.count()==0:
+            return "File is empty"
+        expected_columns = ["Year","Month","DayofMonth","DayOfWeek","DepTime","CRSDepTime",
+                            "ArrTime","CRSArrTime","UniqueCarrier","FlightNum","TailNum",
+                            "ActualElapsedTime","CRSElapsedTime","AirTime","ArrDelay",
+                            "DepDelay","Origin","Dest","Distance","TaxiIn","TaxiOut","Cancelled",
+                            "CancellationCode","Diverted","CarrierDelay","WeatherDelay","NASDelay",
+                            "SecurityDelay","LateAircraftDelay"]
+        obtained_columns = df.columns
+        for col in obtained_columns:
+            if col not in expected_columns:
+                return "Column " + col + " is missing"
+        return df
+    except:
+        return "Something went wrong"
+
 
 
 def preprocess_data(df):
@@ -17,11 +42,13 @@ def preprocess_data(df):
 def construct_pipeline(df):
     indexers = cat_to_num(df)
     ufss = feature_subset_selection(df)
+    DT = decision_tree(df)
+    evaluator = evaluate_model()
+    cv = cross_validate(DT,evaluator)
     stages = indexers
-    stages = stages+ufss
+    stages = stages+ufss+cv
     pipeline = create_pipeline(stages)
-    pipeline = pipeline.fit(df)
-    return pipeline
+    return pipeline,evaluator
 
 def construct_vector(df):
     df=create_vectorAssem(df)
@@ -63,14 +90,24 @@ def main(path):
                         .enableHiveSupport()\
                         .getOrCreate()
 
-    df = spark.read.csv(path,header=True)
-    
-    df_tr,df_tst = preprocess_data(df)
-    pipeline = construct_pipeline(df_tr)
+    df = read_file(spark,path)
+    if type(df) == str:
+        print(df)
+    else:
+        #df = spark.sparkContext.parallelize(df.orderBy(rand()).take(1000)).toDF()
+        df_tr,df_tst = preprocess_data(df)
+        pipeline,evaluator = construct_pipeline(df_tr)
 
-    df_tst_transformed = apply_pipeline(pipeline,df_tst)
+        pipeline = fit_pipeline(pipeline,df_tr)
+        results = apply_pipeline(pipeline,df_tst)
+        results.show(5)
+        #print(results.dtypes)
+        #for result in results.head(3):
+        #    print(result.Features,"\t // \t",result.selectedFeatures)
+        #show_missing_values(results) 
+        print(evaluator.evaluate(results))
 
-    df_tst_transformed.show(2)
+
     
     
 # linear regression
@@ -93,5 +130,6 @@ def main(path):
 
 ####################################### TESTS ########################################## 
 path = "2008.csv"
+#path="oficinas_farmacia.tsv"
 main(path)
 
