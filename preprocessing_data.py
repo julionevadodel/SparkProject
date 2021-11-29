@@ -1,5 +1,5 @@
 import pyspark.sql.functions as f
-from pyspark.ml.feature import StringIndexer, UnivariateFeatureSelector, VectorAssembler
+from pyspark.ml.feature import StringIndexer, UnivariateFeatureSelector, VectorAssembler, OneHotEncoder
 from pyspark.ml import Pipeline
 
 
@@ -11,11 +11,18 @@ def clean_data(df):
                 'WeatherDelay','NASDelay','SecurityDelay','LateAircraftDelay','FlightNum')
 
 
-    df = df.withColumn("DepTime",f.regexp_replace(f.col("DepTime"),"(\\d{1,2})(\\d{2})","$1:$2"))
-    df = df.withColumn("CRSDepTime",f.regexp_replace(f.col("CRSDepTime"),"(\\d{1,2})(\\d{2})","$1:$2"))
-    df = df.withColumn("CRSArrTime",f.regexp_replace(f.col("CRSArrTime"),"(\\d{1,2})(\\d{2})","$1:$2"))
-    df = df.withColumn("Date",f.concat_ws("-","Year","Month","DayofMonth"))
-    df = df.drop("Year","Month","DayofMonth")
+    df = df.withColumn("DepHour",f.regexp_replace(f.col("DepTime"),"(\\d{1,2})(\\d{2})","$1"))
+    df = df.withColumn("DepMinute",f.regexp_replace(f.col("DepTime"),"(\\d{1,2})(\\d{2})","$2"))
+    df = df.withColumn("CRSDepHour",f.regexp_replace(f.col("CRSDepTime"),"(\\d{1,2})(\\d{2})","$1"))
+    df = df.withColumn("CRSDepMinute",f.regexp_replace(f.col("CRSDepTime"),"(\\d{1,2})(\\d{2})","$2"))
+    df = df.withColumn("CRSArrHour",f.regexp_replace(f.col("CRSArrTime"),"(\\d{1,2})(\\d{2})","$1"))
+    df = df.withColumn("CRSArrMinute",f.regexp_replace(f.col("CRSArrTime"),"(\\d{1,2})(\\d{2})","$2"))
+    #df = df.withColumn("DepTime",f.regexp_replace(f.col("DepTime"),"(\\d{1,2})(\\d{2})","$1:$2"))
+    #df = df.withColumn("CRSDepTime",f.regexp_replace(f.col("CRSDepTime"),"(\\d{1,2})(\\d{2})","$1:$2"))
+    #df = df.withColumn("CRSArrTime",f.regexp_replace(f.col("CRSArrTime"),"(\\d{1,2})(\\d{2})","$1:$2"))
+    #df = df.withColumn("Date",f.concat_ws("-","Year","Month","DayofMonth"))
+    #df = df.drop("Year","Month","DayofMonth")
+    df = df.drop("Year")
    
     return df
 
@@ -41,21 +48,25 @@ def organise_data(df):
 
 #########################################   CAST DATA   ##############################
 def cast_data(df):
-    df = df.select(f.col("DayOfWeek").cast('double').alias("DayOfWeek"),
-                    f.col("CRSElapsedTime").cast('double').alias("CRSElapsedTime"),
-                    f.col("DepDelay").cast('double').alias("DepDelay"),
-                    f.col("Distance").cast('double').alias("Distance"),
-                    f.col("TaxiOut").cast('double').alias("TaxiOut"),
-                    f.col("ArrDelay").cast('double').alias("ArrDelay"),'Date','DepTime','CRSDepTime','CRSArrTime','UniqueCarrier',
-                    'TailNum','Origin','Dest')
-    #df = df.withColumn("DayOfWeek",df["DayOfWeek"].cast('int'))
-    #df = df.withColumn("CRSElapsedTime",df["CRSElapsedTime"].cast('int'))
-    #df = df.withColumn("DepDelay",df["DepDelay"].cast('int'))
-    #df = df.withColumn("Distance",df["Distance"].cast('int'))
-    #df = df.withColumn("TaxiOut",df["TaxiOut"].cast('int'))
-    #df = df.withColumn("ArrDelay",df["ArrDelay"].cast('int'))
-    #df = df.withColumn("Cancelled",df["Cancelled"].cast('integer'))
-
+    df = df.select(f.col("DayOfWeek").cast('int').alias("DayOfWeek"),#CATEGORICAL
+                    f.col("CRSElapsedTime").cast('double').alias("CRSElapsedTime"),#NUMERICAL
+                    f.col("DepDelay").cast('double').alias("DepDelay"),#NUMERICAL
+                    f.col("Distance").cast('double').alias("Distance"),#NUMERICAL
+                    f.col("TaxiOut").cast('double').alias("TaxiOut"),#NUMERICAL
+                    f.col("DepHour").cast('int').alias("DepHour"),#NUMERICAL DISCRETE
+                    f.col("DepMinute").cast('int').alias("DepMinute"), #NUMERICAL DISCRETE
+                    f.col("CRSDepHour").cast('int').alias("CRSDepHour"),#NUMERICAL DISCRETE
+                    f.col("CRSDepMinute").cast('int').alias("CRSDepMinute"),#NUMERICAL DISCRETE
+                    f.col("CRSArrHour").cast('int').alias("CRSArrHour"),#NUMERICAL DISCRETE
+                    f.col("CRSArrMinute").cast('int').alias("CRSArrMinute"),#NUMERICAL DISCRETE
+                    f.col("Month").cast('int').alias("Month"),#CATEGORICAL
+                    f.col("DayOfMonth").cast('int').alias("DayOfMonth"),#NUMERICAL
+                    #f.col("ArrDelay").cast('double').alias("ArrDelay"),'Date','DepTime','CRSDepTime','CRSArrTime','UniqueCarrier',
+                    f.col("ArrDelay").cast('double').alias("ArrDelay"),#NUMERICAL
+                    'UniqueCarrier',#NOMINAL
+                    'TailNum',#NOMINAL
+                    'Origin',#NOMINAL
+                    'Dest') #NOMINAL
     return df
 
 
@@ -64,7 +75,6 @@ def cast_data(df):
 #########################################   SHOW DISTINCT VALUES   ##############################
 def show_distinct_values(df):
     print("\nDifferent carriers: ",df.select("UniqueCarrier").distinct().count())
-    print("\nDifferent dates: ",df.select("Date").distinct().collect())
     print("\nDifferent TailNum: ",df.select("TailNum").distinct().count())
     print("\nDifferent Origin: ",df.select("Origin").distinct().count())
     print("\nDifferent Destination: ",df.select("dest").distinct().count())
@@ -95,13 +105,14 @@ def var_correlations(df):
 
 #########################################   CAT TO NUM   ##############################
 def cat_to_num(df):
-    cat_mask = [var_type=='string' for (var_name,var_type) in df.dtypes]
-    cat_cols = [df.columns[i] for i in range(len(df.columns)) if cat_mask[i]]
-    df_cat = df[cat_cols]
-    columns = df_cat.columns
+    columns = ["DayOfWeek","Month","UniqueCarrier","TailNum","Origin","Dest"]
+    indexers = [StringIndexer(inputCol=col,outputCol=col+"_index").setHandleInvalid("skip") for col in columns] #Error with some TailNum since we fit on train and, if not present in that set and then appears in train our fitted pipeline does not know what to do
 
-    indexers = [StringIndexer(inputCol=col,outputCol=col+"_index").fit(df_cat) for col in columns]
-    return indexers
+    ohe_input_cols = [col+"_index" for col in columns]
+    ohe_output_cols = [col+"_vect" for col in columns]
+    ohe = OneHotEncoder(inputCols=ohe_input_cols,outputCols=ohe_output_cols)
+
+    return indexers+[ohe]
 
 
 
@@ -130,19 +141,13 @@ def cat_to_num(df):
     ufss = ufss_cat+ufss_num
     return ufss
 def feature_subset_selection(df):
-    columns = []
-    for i in df.dtypes:
-        if i[1] == 'double':
-            columns.append(i[0])
-        else:
-            columns.append(i[0]+"_index")
-    columns.remove("ArrDelay")
+    columns = ["DayOfWeek_vect","CRSElapsedTime","DepDelay","Distance","TaxiOut","DayOfMonth","DepHour","DepMinute","CRSDepHour","CRSDepMinute",
+                "CRSArrHour","CRSArrMinute","Month_vect","UniqueCarrier_vect","TailNum_vect","Origin_vect","Dest_vect"]
     assembler = VectorAssembler(inputCols=columns,outputCol="Features")
     ufss = UnivariateFeatureSelector(featuresCol="Features",outputCol="selectedFeatures",
                                     labelCol="ArrDelay",selectionMode="fpr")
     ufss.setFeatureType("continuous").setLabelType("continuous").setSelectionThreshold(0.05)
     return [assembler,ufss]
-    
     
 
 
@@ -153,13 +158,17 @@ def create_pipeline(stages):
     pipeline=Pipeline().setStages(stages)
     return pipeline
 
-def apply_pipeline(pipeline,df):
-    df = pipeline.transform(df)
+def fit_pipeline(pipeline,df):
+    pipeline = pipeline.fit(df)
 
-    for i in df.dtypes:
-        if i[1] == "string":
-            df = df.drop(i[0])
-            df = df.withColumnRenamed(i[0]+"_index",i[0])
+    #for i in df.dtypes:
+    #    if i[1] == "string":
+    #        df = df.drop(i[0])
+    #        df = df.withColumnRenamed(i[0]+"_index",i[0])
         
-    return df
+    return pipeline
+
+def apply_pipeline(pipeline,df):
+    results = pipeline.transform(df)
+    return results
 
