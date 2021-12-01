@@ -121,10 +121,10 @@ def cat_to_num(df):
 
 
 #########################################   SPLIT DATA   ##############################
-def split_data(df):
-    df_train,df_test = df.([0.7,0.3],24)
+#def split_data(df):
+#    df_train,df_test = df.([0.7,0.3],24)
 
-    return df_train,df_test
+#    return df_train,df_test
 
 
 
@@ -202,19 +202,19 @@ def create_final_set(df):
 
 
 #########################################   Linear Regression  ##############################
-def apply_linear_regression(df_train,df_test):
-    # creates regressor
-    regressor = LinearRegression(featuresCol = 'features', labelCol = 'ArrDelay')
+#def apply_linear_regression(df_train,df_test):
+#    # creates regressor
+#    regressor = LinearRegression(featuresCol = 'features', labelCol = 'ArrDelay')
 
-    # trains model
-    regressor = regressor.fit(df_train)
-    print_metrics_LR(regressor)
+    # trains model3
+#    regressor = regressor.fit(df_train)
+#    print_metrics_LR(regressor)
 
     # test/evaluate model
-    evaluator=regressor.evaluate(df_test)
-    predictions= evaluator.predictions
+#    evaluator=regressor.evaluate(df_test)
+#    predictions= evaluator.predictions
 
-  return predictions
+#  return predictions
 
 
 def print_metrics_LR(regressor):
@@ -247,7 +247,7 @@ def crossValidation(df):
     return bestModel 
 
  
- def print_metrics_LR(cv):
+def print_metrics_LR(cv):
     
     print("Linear Regression. Best Model ")
 
