@@ -4,6 +4,7 @@ import sys
 from preprocessing_data import *
 from modelling_data import *   
 from pyspark.sql.functions import rand
+from pyspark.ml.tuning import ParamGridBuilder
 
 def read_file(spark,path):
     try:
@@ -39,40 +40,70 @@ def preprocess_data(df):
 
     return df_tr,df_tst
 
-def construct_pipeline(df):
+def construct_preprocessing_pipeline(df):
     indexers = cat_to_num(df)
     ufss = feature_subset_selection(df)
-    DT = decision_tree(df)
-    evaluator = evaluate_model()
-    cv = cross_validate(DT,evaluator)
     stages = indexers
-    stages = stages+ufss+cv
+    stages = stages+ufss
     pipeline = create_pipeline(stages)
+    return pipeline
+
+def construct_tree_pipeline():
+    DT = decision_tree()
+    evaluator = evaluate_model()
+    paramGrid = ParamGridBuilder() \
+                .baseOn({DT.featuresCol : 'selectedFeatures'}) \
+                .baseOn({DT.labelCol : 'ArrDelay' })\
+                .baseOn({DT.predictionCol : 'prediction' })\
+                .addGrid(DT.maxDepth, [5, 7, 11, 13, 15]) \
+                .build()
+    cv = cross_validate(DT,evaluator,paramGrid)
+    pipeline = create_pipeline(cv)
     return pipeline,evaluator
 
-def construct_vector(df):
-    df=create_vectorAssem(df)
-    df=create_final_set(df)
-
-    return df
-
-def data_preparation_LR (df):  
-    df = clean_data(df)
-    df = cast_data(df)
-    df = clean_data2(df)
-    df=drop_null(df)
-    df=organise_data(df)
-    indexers = cat_to_num(df)
-    df= construct_pipeline(indexers).transform(df)  # include transform to construct_pipeline- method
-    df=construct_vector(df)
-
-    return df
+def construct_lr_pipeline():
+    LR = linear_regression()
+    evaluator = evaluate_model()
+    paramGrid = ParamGridBuilder() \
+                .baseOn({LR.featuresCol : 'selectedFeatures'}) \
+                .baseOn({LR.labelCol : 'ArrDelay' })\
+                .baseOn({LR.predictionCol : 'prediction' })\
+                .build()
+    cv = cross_validate(LR,evaluator,paramGrid)
+    pipeline = create_pipeline(cv)
+    return pipeline,evaluator
 
 
 
-def linearRegression(df):
-    df_train,df_test=split_data(df)
-    apply_linear_regression(df_train,df_test)
+
+
+
+
+
+
+#def construct_vector(df):
+#    df=create_vectorAssem(df)
+#    df=create_final_set(df)
+
+#    return df
+
+#def data_preparation_LR (df):  
+#    df = clean_data(df)
+#    df = cast_data(df)
+#    df = clean_data2(df)
+#    df=drop_null(df)
+#    df=organise_data(df)
+#    indexers = cat_to_num(df)
+#    df= construct_pipeline(indexers).transform(df)  # include transform to construct_pipeline- method
+#    df=construct_vector(df)
+
+#    return df
+
+
+
+#def linearRegression(df):
+#    df_train,df_test=split_data(df)
+#    apply_linear_regression(df_train,df_test)
 
 
 
@@ -96,29 +127,40 @@ def main(path):
     else:
         #df = spark.sparkContext.parallelize(df.orderBy(rand()).take(1000)).toDF()
         df_tr,df_tst = preprocess_data(df)
-        pipeline,evaluator = construct_pipeline(df_tr)
+        
+        pipeline_preprocessing = construct_preprocessing_pipeline(df_tr)
 
-        pipeline = fit_pipeline(pipeline,df_tr)
-        results = apply_pipeline(pipeline,df_tst)
-        results.show(5)
-        #print(results.dtypes)
-        #for result in results.head(3):
-        #    print(result.Features,"\t // \t",result.selectedFeatures)
-        #show_missing_values(results) 
-        print(evaluator.evaluate(results))
+        pipeline_preprocessing = fit_pipeline(pipeline_preprocessing,df_tr)
+        df_tr_prec = apply_pipeline(pipeline_preprocessing,df_tr).cache()
+        df_tst_prec = apply_pipeline(pipeline_preprocessing,df_tst).cache()
+
+
+
+
+
+        #DecisionTreeRegressor
+        tree_pipeline,evaluator = construct_tree_pipeline()
+        tree_pipeline = fit_pipeline(tree_pipeline,df_tr_prec)
+        results_tree = apply_pipeline(tree_pipeline,df_tst_prec)
+
+        results_tree.show(5)
+
+        print(evaluator.evaluate(results_tree))
 
 
     
     
-# linear regression
-    df_lr=data_preparation_LR()
-    
-    # linear regression
-    predictions=linearRegression(df_lr)
-    predictions.show(10)
+        # linear regression
+        lr_pipeline,evaluator = construct_lr_pipeline()
+        lr_pipeline = fit_pipeline(lr_pipeline,df_tr_prec)
+        results_lr = apply_pipeline(lr_pipeline,df_tst_prec)
+        
+        results_lr.show(5)
 
-    #  linear regression best model
-    bestModel=crossValidation(df)
+        print(evaluator.evaluate(results_lr))
+
+        #  linear regression best model
+        #bestModel=crossValidation(df)
 
  
     
