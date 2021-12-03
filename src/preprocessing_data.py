@@ -1,7 +1,6 @@
 import pyspark.sql.functions as f
 from pyspark.ml.feature import StringIndexer, UnivariateFeatureSelector, VectorAssembler, OneHotEncoder
 from pyspark.ml import Pipeline
-
 from pyspark.ml.tuning import ParamGridBuilder, CrossValidator
 from pyspark.ml.evaluation import RegressionEvaluator
 
@@ -9,41 +8,38 @@ from pyspark.ml.evaluation import RegressionEvaluator
 
 #########################################   CLEAN DATA     ##############################
 def clean_data(df):
+    #Forbidden variables are dropped as well as FlightNum
     df = df.drop('ArrTime','ActualElapsedTime','AirTime','TaxiIn','Diverted','CarrierDelay',
                 'WeatherDelay','NASDelay','SecurityDelay','LateAircraftDelay','FlightNum')
 
-
+    #Time variables containing hours and minutes are splitted into two columns each. One for hours. One for minutes.
     df = df.withColumn("DepHour",f.regexp_replace(f.col("DepTime"),"(\\d{1,2})(\\d{2})","$1"))
     df = df.withColumn("DepMinute",f.regexp_replace(f.col("DepTime"),"(\\d{1,2})(\\d{2})","$2"))
     df = df.withColumn("CRSDepHour",f.regexp_replace(f.col("CRSDepTime"),"(\\d{1,2})(\\d{2})","$1"))
     df = df.withColumn("CRSDepMinute",f.regexp_replace(f.col("CRSDepTime"),"(\\d{1,2})(\\d{2})","$2"))
     df = df.withColumn("CRSArrHour",f.regexp_replace(f.col("CRSArrTime"),"(\\d{1,2})(\\d{2})","$1"))
     df = df.withColumn("CRSArrMinute",f.regexp_replace(f.col("CRSArrTime"),"(\\d{1,2})(\\d{2})","$2"))
-    #df = df.withColumn("DepTime",f.regexp_replace(f.col("DepTime"),"(\\d{1,2})(\\d{2})","$1:$2"))
-    #df = df.withColumn("CRSDepTime",f.regexp_replace(f.col("CRSDepTime"),"(\\d{1,2})(\\d{2})","$1:$2"))
-    #df = df.withColumn("CRSArrTime",f.regexp_replace(f.col("CRSArrTime"),"(\\d{1,2})(\\d{2})","$1:$2"))
-    #df = df.withColumn("Date",f.concat_ws("-","Year","Month","DayofMonth"))
-    #df = df.drop("Year","Month","DayofMonth")
-    df = df.drop("Year")
+    df = df.drop("Year") #Year is drop since each dataset only contains info for one year.
    
     return df
 
 
 def clean_data2(df):
-    df = df.dropna(subset=["ArrDelay","TailNum"]) #If no flight, useless for ArrDelay?
-    df = df.drop("Cancelled","CancellationCode")
+    df = df.dropna(subset=["ArrDelay","TailNum"]) #If no flight useless for ArrDelay
+    df = df.drop("Cancelled","CancellationCode") #After removing every missing for ArrDelay Cancelled is always 0 and cancellation code is null. Both dropped. No additional information
     return df
 
-def drop_null(df):
+'''def drop_null(df):
     df= df.na.drop()
-    return df
+    return df'''
 
 
 
 #########################################   ORGANISE DATA   ##############################
 def organise_data(df):
+    #Function to organise data in a more understandable way
     df = df[["Date","DayOfWeek","DepTime","CRSDepTime","CRSArrTime","UniqueCarrier","TailNum","CRSElapsedTime",\
-        "DepDelay","Origin","Dest","Distance","TaxiOut","ArrDelay"]] #Add Cancelled and Cancellation code if necessary
+        "DepDelay","Origin","Dest","Distance","TaxiOut","ArrDelay"]] 
     return df
     
 
@@ -52,6 +48,7 @@ def organise_data(df):
 
 #########################################   CAST DATA   ##############################
 def cast_data(df):
+    #Casting of variables to propper datatypes. Originally all of them are strings. True strings like UniqueCarrier are left as they came.
     df = df.select(f.col("DayOfWeek").cast('int').alias("DayOfWeek"),#CATEGORICAL
                     f.col("CRSElapsedTime").cast('double').alias("CRSElapsedTime"),#NUMERICAL
                     f.col("DepDelay").cast('double').alias("DepDelay"),#NUMERICAL
@@ -78,6 +75,7 @@ def cast_data(df):
 
 #########################################   SHOW DISTINCT VALUES   ##############################
 def show_distinct_values(df):
+    #Function to show missing values for categorical and string data. All distinct values are obtained and then counted.
     print("\nDifferent carriers: ",df.select("UniqueCarrier").distinct().count())
     print("\nDifferent TailNum: ",df.select("TailNum").distinct().count())
     print("\nDifferent Origin: ",df.select("Origin").distinct().count())
@@ -89,6 +87,7 @@ def show_distinct_values(df):
 
 #########################################   SHOW MISSING VALUES   ##############################
 def show_missing_values(df):
+    #A function to show missing values in each variable. Used to check if all missing values where really removed.
     df.select([f.count(f.when(f.col(c).isNull(), c)).alias(c) for c in df.columns]).show()
 
 
@@ -96,10 +95,11 @@ def show_missing_values(df):
 
 #########################################   COMPUTE CORRELATIONS   ##############################
 def var_correlations(df):
-    num_mask = [var_type=='double' for (var_name,var_type) in df.dtypes]
-    num_cols = [df.columns[i] for i in range(len(df.columns)) if num_mask[i]]
-    df_num = df[num_cols]    
-    corr = [[df_num.corr(c1,c2) for c1 in df_num.columns] for c2 in df_num.columns]
+    #Function to compute correlations among numerical attributes
+    num_mask = [var_type=='double' for (var_name,var_type) in df.dtypes] #We look for columns whose values are double in the dtypes of the dataframe. A vector of boolean indicating which variable is numerical
+    num_cols = [df.columns[i] for i in range(len(df.columns)) if num_mask[i]]  #We obtain column names for numerical values. (If num_mask == true for that column)
+    df_num = df[num_cols]    #A new dataframe is obtained containing only numerical columns
+    corr = [[df_num.corr(c1,c2) for c1 in df_num.columns] for c2 in df_num.columns] #Correlations between each pair of columns is computed
     print(num_cols)
     [print("\n",corr_row) for corr_row in corr]
     return corr
@@ -109,56 +109,29 @@ def var_correlations(df):
 
 #########################################   CAT TO NUM   ##############################
 def cat_to_num(df):
-    columns = ["DayOfWeek","Month","UniqueCarrier","TailNum","Origin","Dest"]
-    indexers = [StringIndexer(inputCol=col,outputCol=col+"_index").setHandleInvalid("skip") for col in columns] #Error with some TailNum since we fit on train and, if not present in that set and then appears in train our fitted pipeline does not know what to do
+    columns = ["DayOfWeek","Month","UniqueCarrier","TailNum","Origin","Dest"] #A list containing only categorical variables column names
+    indexers = [StringIndexer(inputCol=col,outputCol=col+"_index").setHandleInvalid("skip") for col in columns] #Create an StringIndexer for each categorical attribute.
+    #Error with some TailNum since we fit on train and, if not present in that set and then appears in train our fitted pipeline does not know what to do. Solution setHandleInvalid("skip")
 
-    ohe_input_cols = [col+"_index" for col in columns]
-    ohe_output_cols = [col+"_vect" for col in columns]
-    ohe = OneHotEncoder(inputCols=ohe_input_cols,outputCols=ohe_output_cols)
+    ohe_input_cols = [col+"_index" for col in columns] #Create a list with the column names of indexed variables (the output columns of StringIndexer)
+    ohe_output_cols = [col+"_vect" for col in columns] #Creat a list of column names to serve as the output of OneHotEncoder
+    ohe = OneHotEncoder(inputCols=ohe_input_cols,outputCols=ohe_output_cols) #OneHotEncoder transformation for the whole dataset
 
-    return indexers+[ohe]
+    return indexers+[ohe] #A list of stages to define the pipeline is returned
 
 
-
-#########################################   SPLIT DATA   ##############################
-#def split_data(df):
-#    df_train,df_test = df.([0.7,0.3],24)
-
-#    return df_train,df_test
 
 
 
 #########################################   FEATURE SELECTION  ##############################
-#def feature_subset_selection(df):
-
-    cat_mask = [var_type=='string' for (var_name,var_type) in df.dtypes]
-    num_mask = [var_type=='double' for (var_name,var_type) in df.dtypes]
-
-    cat_cols = [df.columns[i] for i in range(len(df.columns)) if cat_mask[i]]
-    num_cols = [df.columns[i] for i in range(len(df.columns)) if num_mask[i]]
-
-    ufss_cat = [UnivariateFeatureSelector(featuresCol=col,outputCol=col+"_selected",
-                                    labelCol="ArrDelay",selectionMode='fpr')\
-                                    .setSelectionThreshold(0.5)\
-                                    .setFeatureType("categorical")\
-                                    .setLabelType("continuous").fit(df)    
-                                    for col in cat_cols]
-    ufss_num = [UnivariateFeatureSelector(featuresCol=col,outputCol=col+"_selected",
-                                    labelCol="ArrDelay",selectionMode='fpr')\
-                                    .setSelectionThreshold(0.5)\
-                                    .setFeatureType("continuous")\
-                                    .setLabelType("continuous").fit(df) 
-                                     for col in num_cols]
-    ufss = ufss_cat+ufss_num
-    return ufss
 def feature_subset_selection(df):
     columns = ["DayOfWeek_vect","CRSElapsedTime","DepDelay","Distance","TaxiOut","DayOfMonth","DepHour","DepMinute","CRSDepHour","CRSDepMinute",
-                "CRSArrHour","CRSArrMinute","Month_vect","UniqueCarrier_vect","TailNum_vect","Origin_vect","Dest_vect"]
-    assembler = VectorAssembler(inputCols=columns,outputCol="Features")
+                "CRSArrHour","CRSArrMinute","Month_vect","UniqueCarrier_vect","TailNum_vect","Origin_vect","Dest_vect"] #A list with all available features is created
+    assembler = VectorAssembler(inputCols=columns,outputCol="Features") #VectorAssembler to convert the set of available columns into a single vector column containing all this information
     ufss = UnivariateFeatureSelector(featuresCol="Features",outputCol="selectedFeatures",
-                                    labelCol="ArrDelay",selectionMode="fpr")
-    ufss.setFeatureType("continuous").setLabelType("continuous").setSelectionThreshold(0.05)
-    return [assembler,ufss]
+                                    labelCol="ArrDelay",selectionMode="fpr") #UFSS with input the vector column created by VectorAssembler and output column a new vector column containing only selected features
+    ufss.setFeatureType("continuous").setLabelType("continuous").setSelectionThreshold(0.05) #Threshold for selecting features is set to 0.05
+    return [assembler,ufss] #A list of stages to define the pipeline is returned
     
 
 
@@ -166,57 +139,21 @@ def feature_subset_selection(df):
 
 #########################################   PIPELINE  ##############################
 def create_pipeline(stages):
-    pipeline=Pipeline().setStages(stages)
+    pipeline=Pipeline().setStages(stages) #A pipeline is created with the list of stages passed as parameter
     return pipeline
 
 def fit_pipeline(pipeline,df):
-    pipeline = pipeline.fit(df)
-
-    #for i in df.dtypes:
-    #    if i[1] == "string":
-    #        df = df.drop(i[0])
-    #        df = df.withColumnRenamed(i[0]+"_index",i[0])
-        
+    pipeline = pipeline.fit(df) #The pipelined passed as parameter is fit over the dataframe also passed as a parameter  
     return pipeline
 
 def apply_pipeline(pipeline,df):
-    results = pipeline.transform(df)
+    results = pipeline.transform(df) #The pipeline passed as parameter is used to transform the dataframe also passed as a parameter
     return results
 
 
-#########################################   VectorAssembler  ##############################    
-def create_vectorAssem(df):
-    vectorAssembler_str = VectorAssembler(inputCols=['DayOfWeek','CRSElapsedTime','DepDelay','Distance','TaxiOut','DepTime_index','CRSDepTime_index','CRSArrTime_index','Origin_index','Dest_index'], 
-    outputCol="features", handleInvalid="skip")
-
-    df= vectorAssembler_str.transform(df_string_converted)
-
-    return df 
-
-def create_final_set(df):
-    df=df.select('features','ArrDelay')
-
-    return df
 
 
-
-
-#########################################   Linear Regression  ##############################
-#def apply_linear_regression(df_train,df_test):
-#    # creates regressor
-#    regressor = LinearRegression(featuresCol = 'features', labelCol = 'ArrDelay')
-
-    # trains model3
-#    regressor = regressor.fit(df_train)
-#    print_metrics_LR(regressor)
-
-    # test/evaluate model
-#    evaluator=regressor.evaluate(df_test)
-#    predictions= evaluator.predictions
-
-#  return predictions
-
-
+#########################################   MODEL METRICS  ##############################
 def print_metrics_LR(regressor):
     
     print("Linear Regression")
@@ -231,34 +168,26 @@ def print_metrics_LR(regressor):
     print("RMSE Root Mean Square Error: %f" % regressor.summary.rootMeanSquaredError)
     
 
-#########################################   Cross validation  ##############################
-def crossValidation(df):
-    regression = LinearRegression(labelCol='ArrDelay')
-    evaluator = RegressionEvaluator(labelCol='ArrDelay')
+def print_metrics_DT(model):
+    # Print the maximum depth of the best Tree model
+    print("Maximum depth: ",model.maxDepth)
 
-    # creates cross validator with 5 folds
-    cv = CrossValidator(estimator=regression, estimatorParamMaps=params, evaluator=evaluator, numFolds=5)
 
-    # Train and test model on 5 different folds="sets" of data
-    cv = cv.fit(df)
-    print_metrics_LR(cv)
-    bestModel=cv.bestModel
-
-    return bestModel 
-
- 
-def print_metrics_LR(cv):
+def print_metrics_LR(model):
     
     print("Linear Regression. Best Model ")
 
     # What is the relationship between my dependent (x) and independent (y) variable? 
-    print("Coefficients: %s" % cv.bestModel.coefficients)
+    print("Coefficients: %s" % model.coefficients)
     
-    # How much of the data does this model explain?
-    print("R-squared: %f" % cv.bestModel.summary.r2)    
+    if model.hasSummary:
+        # How much of the data does this model explain?
+        print("R-squared: %f" % model.summary.r2)    
     
-    # square root of the average of the squared difference of the predicted and actual value
-    print("RMSE: %f" % regressor.summary.rootMeanSquaredError)   
+        # square root of the average of the squared difference of the predicted and actual value
+
+        print("RMSE: %f" % model.summary.rootMeanSquaredError)   
+
 
 
 def prints_metrics_GLR(model):
@@ -267,15 +196,16 @@ def prints_metrics_GLR(model):
     print("Intercept: " + str(model.intercept))
 
     # Summarize the model over the training set and print out some metrics
-    summary = model.summary
-    print("Coefficient Standard Errors: " + str(summary.coefficientStandardErrors))
-    print("T Values: " + str(summary.tValues))
-    print("P Values: " + str(summary.pValues))
-    print("Dispersion: " + str(summary.dispersion))
-    print("Null Deviance: " + str(summary.nullDeviance))
-    print("Residual Degree Of Freedom Null: " + str(summary.residualDegreeOfFreedomNull))
-    print("Deviance: " + str(summary.deviance))
-    print("Residual Degree Of Freedom: " + str(summary.residualDegreeOfFreedom))
-    print("AIC: " + str(summary.aic))
-    print("Deviance Residuals: ")
-    summary.residuals().show()
+    if model.hasSummary:
+        summary = model.summary
+        print("Coefficient Standard Errors: " + str(summary.coefficientStandardErrors))
+        print("T Values: " + str(summary.tValues))
+        print("P Values: " + str(summary.pValues))
+        print("Dispersion: " + str(summary.dispersion))
+        print("Null Deviance: " + str(summary.nullDeviance))
+        print("Residual Degree Of Freedom Null: " + str(summary.residualDegreeOfFreedomNull))
+        print("Deviance: " + str(summary.deviance))
+        print("Residual Degree Of Freedom: " + str(summary.residualDegreeOfFreedom))
+        print("AIC: " + str(summary.aic))
+        print("Deviance Residuals: ")
+        summary.residuals().show()
