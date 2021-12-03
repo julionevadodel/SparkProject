@@ -73,13 +73,17 @@ def construct_lr_pipeline():
     pipeline = create_pipeline(cv)
     return pipeline,evaluator
 
-
-
-
-
-
-
-
+def construct_glr_pipeline():
+   GLR = generalized_linear_regression()
+   evaluator = evaluate_model()
+   paramGrid = ParamGridBuilder() \
+               .baseOn({GLR.featuresCol : 'selectedFeatures'}) \
+               .baseOn({GLR.labelCol : 'ArrDelay' })\
+               .baseOn({GLR.predictionCol : 'prediction' })\
+               .build()
+   cv = cross_validate(GLR, evaluator, paramGrid)
+   pipeline = create_pipeline(cv)
+   return pipeline, evaluator
 
 #def construct_vector(df):
 #    df=create_vectorAssem(df)
@@ -162,14 +166,16 @@ def main(path):
         #  linear regression best model
         #bestModel=crossValidation(df)
 
+        # Generalized Linear Regression
+        glr_pipeline, evaluator = construct_glr_pipeline()
+        glr_pipeline = fit_pipeline(glr_pipeline, df_tr_prec)
+        results_glr = apply_pipeline(glr_pipeline, df_tst_prec)
+                    
+        results_glr.show(5)
+
+        print(evaluator.evaluate(results_glr))
+        prints_metrics_GLR(model = glr_pipeline)
  
-    
-    
-   
-
-
-
-
 ####################################### TESTS ########################################## 
 path = "2008.csv"
 #path="oficinas_farmacia.tsv"

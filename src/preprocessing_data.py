@@ -259,3 +259,23 @@ def print_metrics_LR(cv):
     
     # square root of the average of the squared difference of the predicted and actual value
     print("RMSE: %f" % regressor.summary.rootMeanSquaredError)   
+
+
+def prints_metrics_GLR(model):
+    # Print the coefficients and intercept for generalized linear regression model
+    print("Coefficients: " + str(model.coefficients))
+    print("Intercept: " + str(model.intercept))
+
+    # Summarize the model over the training set and print out some metrics
+    summary = model.summary
+    print("Coefficient Standard Errors: " + str(summary.coefficientStandardErrors))
+    print("T Values: " + str(summary.tValues))
+    print("P Values: " + str(summary.pValues))
+    print("Dispersion: " + str(summary.dispersion))
+    print("Null Deviance: " + str(summary.nullDeviance))
+    print("Residual Degree Of Freedom Null: " + str(summary.residualDegreeOfFreedomNull))
+    print("Deviance: " + str(summary.deviance))
+    print("Residual Degree Of Freedom: " + str(summary.residualDegreeOfFreedom))
+    print("AIC: " + str(summary.aic))
+    print("Deviance Residuals: ")
+    summary.residuals().show()
