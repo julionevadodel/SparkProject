@@ -1,4 +1,4 @@
-from pyspark.ml.regression import DecisionTreeRegressor, LinearRegression
+from pyspark.ml.regression import DecisionTreeRegressor, LinearRegression, GeneralizedLinearRegression
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
 
@@ -31,3 +31,11 @@ def decision_tree():
 ########################################## LinearRegression ######################
 def linear_regression():
     LR = LinearRegression(featuresCol = 'features', labelCol = 'ArrDelay')
+    return LR
+
+
+
+########################################## GeneralizedLinearRegression ######################
+def generalized_linear_regression():
+    GLR = GeneralizedLinearRegression(family="gaussian", link="identity", maxIter=10, regParam=0.3)
+    return GLR

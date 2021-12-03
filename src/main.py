@@ -129,7 +129,7 @@ def main(path):
     if type(df) == str:
         print(df)
     else:
-        #df = spark.sparkContext.parallelize(df.orderBy(rand()).take(1000)).toDF()
+        df = spark.sparkContext.parallelize(df.orderBy(rand()).take(1000)).toDF()
         df_tr,df_tst = preprocess_data(df)
         
         pipeline_preprocessing = construct_preprocessing_pipeline(df_tr)
@@ -139,7 +139,7 @@ def main(path):
         df_tst_prec = apply_pipeline(pipeline_preprocessing,df_tst).cache()
 
 
-
+        
 
 
         #DecisionTreeRegressor
@@ -174,7 +174,8 @@ def main(path):
         results_glr.show(5)
 
         print(evaluator.evaluate(results_glr))
-        prints_metrics_GLR(model = glr_pipeline)
+        print(glr_pipeline.stages[0].getEstimator())
+        prints_metrics_GLR(model = glr_pipeline.stages[0].bestModel)
  
 ####################################### TESTS ########################################## 
 path = "2008.csv"
